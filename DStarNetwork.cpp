@@ -218,6 +218,9 @@ void CDStarNetwork::clock(unsigned int ms)
 
 	switch (buffer[4]) {
 	case 0x00U:			// NETWORK_TEXT;
+		if (length < 34)
+			return;
+
 		if (m_debug)
 			CUtils::dump(1U, "D-Star Network Status Received", buffer, length);
 
@@ -233,6 +236,9 @@ void CDStarNetwork::clock(unsigned int ms)
 		return;
 
 	case 0x20U:			// NETWORK_HEADER
+		if (length < 9)
+			return;
+
 		if (m_inId == 0U && m_enabled) {
 			if (m_debug)
 				CUtils::dump(1U, "D-Star Network Header Received", buffer, length);
@@ -250,6 +256,9 @@ void CDStarNetwork::clock(unsigned int ms)
 		break;
 
 	case 0x21U:			// NETWORK_DATA
+		if (length < 10)
+			return;
+
 		if (m_enabled) {
 			if (m_debug)
 				CUtils::dump(1U, "D-Star Network Data Received", buffer, length);
