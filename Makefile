@@ -58,6 +58,6 @@ endif
 
 # No radio or gateway is opened; GNU ld wrappers capture boundary calls.
 .PHONY: test-dmr-duplex-control
-test-dmr-duplex-control: $(filter-out MMDVM-Host.o,$(OBJS))
-	$(CXX) $(CFLAGS) -I. tests/DMRDuplexControl.cpp $(filter-out MMDVM-Host.o,$(OBJS)) $(LDFLAGS) $(LIBS) -Wl,--wrap=_ZN11CDMRNetwork5writeERK8CDMRData -Wl,--wrap=_ZN6CModem13writeDMRAbortEj -Wl,--wrap=_ZN6CModem15writeDMRShortLCEPKhb -o tests/dmr-duplex-control
+test-dmr-duplex-control: $(filter-out MMDVM-Host.o RemoteControl.o,$(OBJS))
+	$(CXX) $(CFLAGS) -UNDEBUG -I. tests/DMRDuplexControl.cpp $(filter-out MMDVM-Host.o RemoteControl.o,$(OBJS)) $(LDFLAGS) $(LIBS) -Wl,--wrap=_ZN11CDMRNetwork5writeERK8CDMRData -Wl,--wrap=_ZN6CModem13writeDMRAbortEj -Wl,--wrap=_ZN6CModem15writeDMRShortLCEPKhb -o tests/dmr-duplex-control
 	./tests/dmr-duplex-control

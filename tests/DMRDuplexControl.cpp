@@ -20,6 +20,8 @@
 #include <vector>
 #include <unistd.h>
 
+bool g_listenOnly = false;
+
 static std::vector<CDMRData> sent;
 static unsigned int aborts = 0U;
 
