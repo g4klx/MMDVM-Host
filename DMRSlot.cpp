@@ -46,6 +46,7 @@ CDMRLookup*    CDMRSlot::m_lookup = nullptr;
 unsigned int   CDMRSlot::m_hangCount = 3U * 17U;
 DMR_OVCM       CDMRSlot::m_ovcm = DMR_OVCM::OFF;
 bool           CDMRSlot::m_protect = false;
+unsigned int   CDMRSlot::m_duplexControlTG = 0U;
 
 CRSSIInterpolator* CDMRSlot::m_rssiMapper = nullptr;
 
@@ -133,6 +134,7 @@ m_rssiCount(0U),
 m_bitErrsAccum(0U),
 m_bitsCount(0U),
 m_enabled(true),
+m_rfControlCall(false),
 m_rcCommand(0U)
 {
 	m_lastFrame = new unsigned char[DMR_FRAME_LENGTH_BYTES + 2U];
@@ -281,6 +283,11 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 
 			m_rfLC = lc;
 
+			// Keep a control call network-only until its RF terminator, even if
+			// the downlink ends first. The default TG of zero disables this.
+			m_rfControlCall = m_duplex && m_netState == RPT_NET_STATE::AUDIO &&
+				m_duplexControlTG != 0U && flco == FLCO::GROUP && dstId == m_duplexControlTG;
+
 			// The standby LC data
 			m_rfEmbeddedLC.setLC(*m_rfLC);
 			m_rfEmbeddedData[0U].setLC(*m_rfLC);
@@ -321,7 +328,7 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 			m_bitsCount    = 0U;
 			m_bitErrsAccum = 0U;
 
-			if (m_duplex) {
+			if (m_duplex && !m_rfControlCall) {
 				m_queue.clear();
 				m_modem->writeDMRAbort(m_slotNo);
 
@@ -449,6 +456,7 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 			m_rfFrames = dataHeader.getBlocks();
 
 			m_rfLC = new CDMRLC(gi ? FLCO::GROUP : FLCO::USER_USER, srcId, dstId);
+			m_rfControlCall = false;
 
 			// Regenerate the data header
 			dataHeader.get(data + 2U);
@@ -918,6 +926,11 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 
 				m_rfLC = lc;
 
+				// Keep a control call network-only until its RF terminator, even if
+				// the downlink ends first. The default TG of zero disables this.
+				m_rfControlCall = m_duplex && m_netState == RPT_NET_STATE::AUDIO &&
+					m_duplexControlTG != 0U && flco == FLCO::GROUP && dstId == m_duplexControlTG;
+
 				// The standby LC data
 				m_rfEmbeddedLC.setLC(*m_rfLC);
 				m_rfEmbeddedData[0U].setLC(*m_rfLC);
@@ -962,7 +975,7 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 				m_bitErrsAccum = 0U;
 				m_bitsCount    = 0U;
 
-				if (m_duplex) {
+				if (m_duplex && !m_rfControlCall) {
 					m_queue.clear();
 					m_modem->writeDMRAbort(m_slotNo);
 
@@ -1083,6 +1096,7 @@ void CDMRSlot::writeEndRF(bool writeEnd)
 
 	delete m_rfLC;
 	m_rfLC = nullptr;
+	m_rfControlCall = false;
 }
 
 void CDMRSlot::writeEndNet(bool writeEnd)
@@ -2167,7 +2181,7 @@ void CDMRSlot::writeQueueRF(const unsigned char *data)
 {
 	assert(data != nullptr);
 
-	if (m_netState != RPT_NET_STATE::IDLE)
+	if (m_rfControlCall || m_netState != RPT_NET_STATE::IDLE)
 		return;
 
 	unsigned char len = DMR_FRAME_LENGTH_BYTES + 2U;
@@ -2186,7 +2200,11 @@ void CDMRSlot::writeNetworkRF(const unsigned char* data, unsigned char dataType,
 {
 	assert(data != nullptr);
 
-	if (m_netState != RPT_NET_STATE::IDLE)
+	const bool controlVoice = m_rfControlCall && flco == FLCO::GROUP &&
+		dstId == m_duplexControlTG &&
+		(dataType == DT_VOICE_LC_HEADER || dataType == DT_VOICE_SYNC ||
+		 dataType == DT_VOICE || dataType == DT_TERMINATOR_WITH_LC);
+	if (m_netState != RPT_NET_STATE::IDLE && !controlVoice)
 		return;
 
 	if (m_network == nullptr)
@@ -2234,7 +2252,7 @@ void CDMRSlot::writeQueueNet(const unsigned char *data)
 	m_queue.addData(data, len);
 }
 
-void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect)
+void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect, unsigned int duplexControlTG)
 {
 	assert(modem != nullptr);
 	assert(lookup != nullptr);
@@ -2250,6 +2268,7 @@ void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData
 	m_hangCount      = (!m_modem->getDMRTrunkingEnabled()) ? callHang * 17U : callHang;
 	m_ovcm           = ovcm;
 	m_protect        = protect;
+	m_duplexControlTG = duplexControlTG;
 
 	m_rssiMapper     = rssiMapper;
 
@@ -2481,6 +2500,7 @@ void CDMRSlot::enable(bool enabled)
 
 		delete m_rfLC;
 		m_rfLC = nullptr;
+		m_rfControlCall = false;
 
 		// Reset the networking section
 		switch(m_netState) {

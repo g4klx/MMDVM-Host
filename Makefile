@@ -46,7 +46,7 @@ uninstall-service:
 		@rm -f /lib/systemd/system/mmdvmhost.service || true
 
 clean:
-		$(RM) MMDVM-Host *.o *.d *.bak *~ GitVersion.h
+		$(RM) MMDVM-Host *.o *.d *.bak *~ GitVersion.h tests/dmr-duplex-control
 
 # Export the current git version if the index file exists, else 000...
 GitVersion.h:
@@ -55,3 +55,9 @@ ifneq ("$(wildcard .git/index)","")
 else
 	echo "const char *gitversion = \"0000000000000000000000000000000000000000\";" > $@
 endif
+
+# No radio or gateway is opened; GNU ld wrappers capture boundary calls.
+.PHONY: test-dmr-duplex-control
+test-dmr-duplex-control: $(filter-out MMDVM-Host.o,$(OBJS))
+	$(CXX) $(CFLAGS) -I. tests/DMRDuplexControl.cpp $(filter-out MMDVM-Host.o,$(OBJS)) $(LDFLAGS) $(LIBS) -Wl,--wrap=_ZN11CDMRNetwork5writeERK8CDMRData -Wl,--wrap=_ZN6CModem13writeDMRAbortEj -Wl,--wrap=_ZN6CModem15writeDMRShortLCEPKhb -o tests/dmr-duplex-control
+	./tests/dmr-duplex-control
