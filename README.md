@@ -42,9 +42,3 @@ route and generating an unlink announcement are decisions made by the gateway
 or master. In particular, delivery of TG4000 to a BrandMeister master does not
 by itself guarantee immediate termination of the current downlink.
 
-A Linux regression test exercises the slot decoder and call lifecycle without
-opening a modem or gateway socket:
-
-```sh
-make test-dmr-duplex-control
-```

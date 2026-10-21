@@ -19,5 +19,3 @@ Images
 .vscode
 *.ambe
 GitVersion.h
-
-tests/dmr-duplex-control
