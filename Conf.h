@@ -160,6 +160,7 @@ public:
 	std::vector<unsigned int> getDMRSlot1TGWhiteList() const;
 	std::vector<unsigned int> getDMRSlot2TGWhiteList() const;
 	unsigned int getDMRCallHang() const;
+	unsigned int getDMRDuplexControlTG() const;
 	unsigned int getDMRTXHang() const;
 	unsigned int getDMRModeHang() const;
 	DMR_OVCM     getDMROVCM() const;
@@ -451,6 +452,7 @@ private:
 	std::vector<unsigned int> m_dmrSlot1TGWhiteList;
 	std::vector<unsigned int> m_dmrSlot2TGWhiteList;
 	unsigned int m_dmrCallHang;
+	unsigned int m_dmrDuplexControlTG;
 	unsigned int m_dmrTXHang;
 #endif
 	unsigned int m_dmrModeHang;

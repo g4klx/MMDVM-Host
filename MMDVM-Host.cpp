@@ -663,6 +663,7 @@ int CMMDVMHost::run()
 			LogInfo("    Slot 2 TG White List: %u", slot2TGWhiteList.size());
 
 		LogInfo("    Call Hang: %us", callHang);
+		LogInfo("    Duplex Control TG: %u", m_conf.getDMRDuplexControlTG());
 		LogInfo("    TX Hang: %us", txHang);
 		LogInfo("    Mode Hang: %us", m_dmrRFModeHang);
 		if (ovcm == DMR_OVCM::OFF)
@@ -718,7 +719,7 @@ int CMMDVMHost::run()
 				break;
 		}
 
-		m_dmr = new CDMRControl(id, colorCode, callHang, selfOnly, embeddedLCOnly, dumpTAData, prefixes, blackList, whiteList, slot1TGWhiteList, slot2TGWhiteList, m_timeout, m_modem, m_dmrNetwork, m_duplex, m_dmrLookup, rssi, jitter, ovcm, protect);
+		m_dmr = new CDMRControl(id, colorCode, callHang, selfOnly, embeddedLCOnly, dumpTAData, prefixes, blackList, whiteList, slot1TGWhiteList, slot2TGWhiteList, m_timeout, m_modem, m_dmrNetwork, m_duplex, m_dmrLookup, rssi, jitter, ovcm, protect, m_conf.getDMRDuplexControlTG());
 
 		m_dmrTXTimer.setTimeout(txHang);
 
