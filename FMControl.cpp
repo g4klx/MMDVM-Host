@@ -25,9 +25,10 @@
 
 #define SWAP_BYTES_16(a) (((a >> 8) & 0x00FFU) | ((a << 8) & 0xFF00U))
 
-const float        DEEMPHASIS_GAIN_DB  = 8.0F;  // Audio gain  adjustment
-const float        PREEMPHASIS_GAIN_DB = 0.0F;  // Audio gain  adjustment
-const float        FILTER_GAIN_DB      = 2.0F;  // Audio gain  adjustment
+// Each block has unity gain at 1kHz
+const float        DEEMPHASIS_GAIN_DB  = 13.22F;  // Audio gain  adjustment
+const float        PREEMPHASIS_GAIN_DB = -13.22F; // Audio gain  adjustment
+const float        FILTER_GAIN_DB      = 0.0F;    // Audio gain  adjustment
 const unsigned int FM_MASK             = 0x00000FFFU;
 
 const unsigned char FS_LISTENING         = 0U;
@@ -62,8 +63,9 @@ m_filterStage3(nullptr)
 	assert(rxAudioGain > 0.0F);
 	assert(rssiMapper != nullptr);
 
-	m_preEmphasis  = new CIIRDirectForm1Filter(8.315375384336983F, -7.03334621603483F,0.0F,1.0F, 0.282029168302153F,0.0F, PREEMPHASIS_GAIN_DB);
-	m_deEmphasis   = new CIIRDirectForm1Filter(0.07708787090460224F, 0.07708787090460224F,0.0F, 1.0F, -0.8458242581907955F,0.0F, DEEMPHASIS_GAIN_DB);
+	// 750us, fs=8000, de-emphasis is the exact inverse of pre-emphasis
+	m_preEmphasis  = new CIIRDirectForm1Filter(7.067672768F, -5.920172768F,0.0F,1.0F, 0.1475F,0.0F, PREEMPHASIS_GAIN_DB);
+	m_deEmphasis   = new CIIRDirectForm1Filter(0.141489290F, 0.020869670F,0.0F, 1.0F, -0.837641040F,0.0F, DEEMPHASIS_GAIN_DB);
 
 	// Chebyshev type 1 0.2dB cheby type 1 3rd order 300-2700Hz fs=8000
 	m_filterStage1 = new CIIRDirectForm1Filter(0.29495028f, 0.0f, -0.29495028f, 1.0f, -0.61384624f, -0.057158668f, FILTER_GAIN_DB);
@@ -203,6 +205,11 @@ unsigned int CFMControl::readModem(unsigned char* data, unsigned int space)
 		// Pre-emphasis
 		if (m_preEmphasisOn)
 			sampleFloat = m_preEmphasis->filter(sampleFloat);
+
+		if (sampleFloat > 2047.0F / 2048.0F)
+			sampleFloat = 2047.0F / 2048.0F;
+		else if (sampleFloat < -1.0F)
+			sampleFloat = -1.0F;
 
 		// Convert float to 12-bit samples (0 to 4095)
 		unsigned int sample12bit = (unsigned int)((sampleFloat + 1.0F) * 2048.0F + 0.5F);
