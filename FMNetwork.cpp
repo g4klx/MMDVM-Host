@@ -42,7 +42,8 @@ m_debug(debug),
 m_enabled(false),
 m_buffer(2000U, "FM Network"),
 m_seqNo(0U),
-m_timer(1000U, 5U)
+m_timer(1000U, 5U),
+m_endOfTransmission(false)
 {
 	assert(!callsign.empty());
 	assert(gatewayPort > 0U);
@@ -215,6 +216,11 @@ void CFMNetwork::clock(unsigned int ms)
 	if (m_debug)
 		CUtils::dump(1U, "FM Network Data Received", buffer, length);
 
+	if (::memcmp(buffer, "FME", 3U) == 0) {
+		m_endOfTransmission = true;
+		return;
+	}
+
 	if (::memcmp(buffer, "FMD", 3U) != 0)
 		return;
 
@@ -244,9 +250,20 @@ unsigned int CFMNetwork::readData(float* out, unsigned int nOut)
 	return nOut;
 }
 
+bool CFMNetwork::readEnd()
+{
+	if (m_endOfTransmission) {
+		m_endOfTransmission = false;
+		return true;
+	}
+
+	return false;
+}
+
 void CFMNetwork::reset()
 {
 	m_buffer.clear();
+	m_endOfTransmission = false;
 }
 
 void CFMNetwork::close()

@@ -124,8 +124,16 @@ bool CFMControl::writeModem(const unsigned char* data, unsigned int length)
 	if (m_network == nullptr)
 		return true;
 
-	if (data[0U] == TAG_EOT)
+	if (data[0U] == TAG_EOT) {
+		// Reset the RX filter states at the end of each transmission so that
+		// leftover IIR state cannot bleed into the next conversation.
+		m_deEmphasis->reset();
+		m_filterStage1->reset();
+		m_filterStage2->reset();
+		m_filterStage3->reset();
+
 		return m_network->writeEnd();
+	}
 
 	if (data[0U] != TAG_DATA)
 		return false;
@@ -184,6 +192,11 @@ unsigned int CFMControl::readModem(unsigned char* data, unsigned int space)
 
 	if (m_network == nullptr)
 		return 0U;
+
+	// A network end-of-transmission was received, reset the TX pre-emphasis
+	// filter so that the next conversation starts with clean filter state.
+	if (m_network->readEnd())
+		m_preEmphasis->reset();
 
 	if (space > 240U)		// 160 samples 12-bit
 		space = 240U;		// 160 samples 12-bit
