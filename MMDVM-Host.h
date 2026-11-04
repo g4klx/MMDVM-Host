@@ -213,6 +213,7 @@ private:
 	void writeJSONMessage(const std::string& message);
 
 	static void onDisplay(const unsigned char* message, unsigned int length);
+	static void onQSOInfo(const unsigned char* message, unsigned int length);
 	static void onCommand(const unsigned char* command, unsigned int length);
 };
 
