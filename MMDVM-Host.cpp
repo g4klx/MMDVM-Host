@@ -340,6 +340,7 @@ int CMMDVMHost::run()
 
 	std::vector<std::pair<std::string, void (*)(const unsigned char*, unsigned int)>> subscriptions;
 	subscriptions.push_back(std::make_pair("display-in", CMMDVMHost::onDisplay));
+	subscriptions.push_back(std::make_pair("qso-info", CMMDVMHost::onQSOInfo));
 
 	if (m_conf.getRemoteControlEnabled())
 		subscriptions.push_back(std::make_pair("command", CMMDVMHost::onCommand));
@@ -3220,4 +3221,13 @@ void CMMDVMHost::onDisplay(const unsigned char* message, unsigned int length)
 	assert(message != nullptr);
 
 	host->writeSerial(message, length);
+}
+
+void CMMDVMHost::onQSOInfo(const unsigned char* message, unsigned int length)
+{
+	assert(host != nullptr);
+	assert(message != nullptr);
+
+	if (host->m_modem != nullptr)
+		host->m_modem->writeQSOInfo(message, length);
 }

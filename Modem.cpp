@@ -1943,6 +1943,31 @@ bool CModem::writeSerialData(const unsigned char* data, unsigned int length)
 	return true;
 }
 
+// A QSO information frame built by the caller (mode byte first), for a
+// modem with its own screen such as the DVMega CAST. Queued with the
+// serial data so it is written from the modem's own thread.
+bool CModem::writeQSOInfo(const unsigned char* data, unsigned int length)
+{
+	assert(data != nullptr);
+
+	if (length == 0U || length > 250U)
+		return false;
+
+	unsigned char buffer[255U];
+
+	buffer[0U] = MMDVM_FRAME_START;
+	buffer[1U] = length + 3U;
+	buffer[2U] = MMDVM_QSO_INFO;
+
+	::memcpy(buffer + 3U, data, length);
+
+	unsigned char len = length + 3U;
+	m_txSerialData.addData(&len, 1U);
+	m_txSerialData.addData(buffer, len);
+
+	return true;
+}
+
 bool CModem::hasTX() const
 {
 	return m_tx;
