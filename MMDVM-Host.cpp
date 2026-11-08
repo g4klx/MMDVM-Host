@@ -1795,6 +1795,8 @@ bool CMMDVMHost::createModem()
 		return false;
 	}
 
+	writeJSONModem();
+
 	return true;
 }
 
@@ -3173,6 +3175,69 @@ void CMMDVMHost::writeJSONMode(const std::string& mode)
 	json["mode"]      = mode;
 
 	WriteJSON("MMDVM", json);
+}
+
+void CMMDVMHost::buildModemInfo(nlohmann::json& json)
+{
+	json["timestamp"] = CUtils::createTimestamp();
+
+	if (m_modem == nullptr) {
+		json["open"] = false;
+		return;
+	}
+
+	json["open"]        = true;
+	json["protocol"]    = m_modem->getVersion();
+	json["description"] = m_modem->getDescription();
+	if (!m_modem->getCPU().empty())
+		json["cpu"] = m_modem->getCPU();
+	if (!m_modem->getUDID().empty())
+		json["udid"] = m_modem->getUDID();
+
+	nlohmann::json modes = nlohmann::json::array();
+	if (m_modem->hasDStar())
+		modes.push_back("D-Star");
+	if (m_modem->hasDMR())
+		modes.push_back("DMR");
+	if (m_modem->hasYSF())
+		modes.push_back("YSF");
+	if (m_modem->hasP25())
+		modes.push_back("P25");
+	if (m_modem->hasNXDN())
+		modes.push_back("NXDN");
+	if (m_modem->hasFM())
+		modes.push_back("FM");
+	if (m_modem->hasPOCSAG())
+		modes.push_back("POCSAG");
+	json["modes"] = modes;
+
+	std::string protocol = m_conf.getModemProtocol();
+	json["connection"] = protocol;
+	if (protocol == "uart") {
+		json["port"]  = m_conf.getModemUARTPort();
+		json["speed"] = m_conf.getModemUARTSpeed();
+	} else if (protocol == "i2c") {
+		json["port"] = m_conf.getModemI2CPort();
+	} else if (protocol == "udp") {
+		json["address"] = m_conf.getModemModemAddress();
+		json["port"]    = m_conf.getModemModemPort();
+	}
+}
+
+void CMMDVMHost::buildModemInfoString(std::string& str)
+{
+	nlohmann::json json;
+	buildModemInfo(json);
+
+	str = json.dump(-1, ' ', false, nlohmann::json::error_handler_t::ignore);
+}
+
+void CMMDVMHost::writeJSONModem()
+{
+	nlohmann::json json;
+	buildModemInfo(json);
+
+	WriteJSON("Modem", json);
 }
 
 void CMMDVMHost::writeJSONMessage(const std::string& message)
