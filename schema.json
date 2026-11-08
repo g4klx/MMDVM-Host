@@ -23,7 +23,9 @@
 		"loss": {"type": "number", "minimum": 0.0},
 		"ber": {"type": "number", "minimum": 0.0},
 		"rssi": {"type": "integer", "minimum": -200, "maximum": -10},
-		"timestamp": {"type": "string"}
+		"timestamp": {"type": "string"},
+		"modem_mode": {"type": "string", "enum": ["D-Star", "DMR", "YSF", "P25", "NXDN", "FM", "POCSAG"]},
+		"modem_connection": {"type": "string", "enum": ["uart", "udp", "i2c", "null"]}
 	},
 
 	"MMDVM": {
@@ -178,5 +180,21 @@
 		"timestamp": {"$ref": "#/$defs/timestamp"},
 		"state": {"$ref": "#/$defs/fm_state"},
 		"required": ["timestamp", "state"]
+	},
+
+	"Modem": {
+		"type": "object",
+		"timestamp": {"$ref": "#/$defs/timestamp"},
+		"open": {"type": "boolean"},
+		"protocol": {"type": "integer", "enum": [1, 2]},
+		"description": {"type": "string"},
+		"cpu": {"type": "string"},
+		"udid": {"type": "string"},
+		"modes": {"type": "array", "items": {"$ref": "#/$defs/modem_mode"}},
+		"connection": {"$ref": "#/$defs/modem_connection"},
+		"port": {"type": ["string", "integer"]},
+		"speed": {"type": "integer"},
+		"address": {"type": "string"},
+		"required": ["timestamp", "open"]
 	}
 }
