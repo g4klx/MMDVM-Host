@@ -80,12 +80,12 @@ bool CMQTTConnection::open()
 	::mosquitto_message_callback_set(m_mosq, onMessage);
 	::mosquitto_disconnect_callback_set(m_mosq, onDisconnect);
 
-	int rc = ::mosquitto_connect(m_mosq, m_host.c_str(), m_port, m_keepalive);
+	// Use asynchronous connection to prevent the host from blocking if the broker is down
+	int rc = ::mosquitto_connect_async(m_mosq, m_host.c_str(), m_port, m_keepalive);
 	if (rc != MOSQ_ERR_SUCCESS) {
-		::mosquitto_destroy(m_mosq);
-		m_mosq = nullptr;
-		::fprintf(stderr, "MQTT Error connecting: %s\n", ::mosquitto_strerror(rc));
-		return false;
+		// Do not destroy m_mosq and do not return false.
+		// Mosquitto will try to reconnect in the background. Just warn the user.
+		::fprintf(stderr, "MQTT Warning: Unable to connect immediately (will keep trying): %s\n", ::mosquitto_strerror(rc));
 	}
 
 	rc = ::mosquitto_loop_start(m_mosq);
@@ -230,4 +230,3 @@ void CMQTTConnection::onDisconnect(mosquitto* mosq, void* obj, int rc)
 	CMQTTConnection* p = static_cast<CMQTTConnection*>(obj);
 	p->m_connected = false;
 }
-

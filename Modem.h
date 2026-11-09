@@ -87,6 +87,13 @@ public:
 
 	unsigned int getVersion() const;
 
+	// What the modem said in its version reply: its description, CPU
+	// (protocol 2 only) and chip ID (protocol 2, or protocol 1 firmware
+	// built to send one), each empty when it did not say.
+	std::string getDescription() const;
+	std::string getCPU() const;
+	std::string getUDID() const;
+
 #if defined(USE_DSTAR)
 	unsigned int readDStarData(unsigned char* data);
 #endif
@@ -192,6 +199,7 @@ public:
 	unsigned int readTransparentData(unsigned char* data);
 
 	bool writeSerialData(const unsigned char* data, unsigned int length);
+	bool writeQSOInfo(const unsigned char* data, unsigned int length);
 	unsigned int readSerialData(unsigned char* data);
 
 	unsigned char getMode() const;
@@ -402,6 +410,9 @@ private:
 #endif
 	unsigned char              m_capabilities1;
 	unsigned char              m_capabilities2;
+	std::string                m_description;
+	std::string                m_cpu;
+	std::string                m_udid;
 
 	bool readVersion();
 	bool readStatus();

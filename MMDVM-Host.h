@@ -42,6 +42,8 @@
 #include "Modem.h"
 #include "Conf.h"
 
+#include <nlohmann/json.hpp>
+
 #include <string>
 
 class CMMDVMHost
@@ -54,6 +56,7 @@ public:
 
 	void buildNetworkStatusString(std::string &str);
 	void buildNetworkHostsString(std::string &str);
+	void buildModemInfoString(std::string &str);
 
 private:
 	void setListenOnly(bool on);
@@ -211,8 +214,11 @@ private:
 
 	void writeJSONMode(const std::string& mode);
 	void writeJSONMessage(const std::string& message);
+	void buildModemInfo(nlohmann::json& json);
+	void writeJSONModem();
 
 	static void onDisplay(const unsigned char* message, unsigned int length);
+	static void onQSOInfo(const unsigned char* message, unsigned int length);
 	static void onCommand(const unsigned char* command, unsigned int length);
 };
 

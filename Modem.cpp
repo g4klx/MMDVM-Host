@@ -33,6 +33,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cassert>
+#include <cctype>
 #include <cstdint>
 #include <ctime>
 
@@ -318,6 +319,9 @@ m_fmExtEnable(false),
 #endif
 m_capabilities1(0x00U),
 m_capabilities2(0x00U),
+m_description(),
+m_cpu(),
+m_udid(),
 m_serialDataLen(0U)
 {
 	m_buffer = new unsigned char[BUFFER_LENGTH];
@@ -1943,6 +1947,31 @@ bool CModem::writeSerialData(const unsigned char* data, unsigned int length)
 	return true;
 }
 
+// A QSO information frame built by the caller (mode byte first), for a
+// modem with its own screen such as the DVMega CAST. Queued with the
+// serial data so it is written from the modem's own thread.
+bool CModem::writeQSOInfo(const unsigned char* data, unsigned int length)
+{
+	assert(data != nullptr);
+
+	if (length == 0U || length > 250U)
+		return false;
+
+	unsigned char buffer[255U];
+
+	buffer[0U] = MMDVM_FRAME_START;
+	buffer[1U] = length + 3U;
+	buffer[2U] = MMDVM_QSO_INFO;
+
+	::memcpy(buffer + 3U, data, length);
+
+	unsigned char len = length + 3U;
+	m_txSerialData.addData(&len, 1U);
+	m_txSerialData.addData(buffer, len);
+
+	return true;
+}
+
 bool CModem::hasTX() const
 {
 	return m_tx;
@@ -2032,30 +2061,61 @@ bool CModem::readVersion()
 			if ((resp == RESP_TYPE_MMDVM::OK) && (m_buffer[2U] == MMDVM_GET_VERSION)) {
 				m_protocolVersion = m_buffer[3U];
 				switch (m_protocolVersion) {
-				case 1U:
+				case 1U: {
 					LogInfo("MMDVM protocol version: 1, description: %.*s", m_length - 4U, m_buffer + 4U);
+					// Firmware built with its chip ID sends it as text after
+					// a NUL that ends the description.
+					unsigned int descLen = 0U;
+					while ((4U + descLen) < m_length && m_buffer[4U + descLen] != 0x00U)
+						descLen++;
+					m_description = std::string((char*)(m_buffer + 4U), descLen);
+					m_cpu.clear();
+					m_udid.clear();
+					for (unsigned int i = 4U + descLen + 1U; i < m_length && m_buffer[i] != 0x00U; i++) {
+						if (::isxdigit(m_buffer[i]))
+							m_udid += char(::toupper(m_buffer[i]));
+					}
+					if (!m_udid.empty())
+						LogInfo("UDID: %s", m_udid.c_str());
 					m_capabilities1 = CAP1_DSTAR | CAP1_DMR | CAP1_YSF | CAP1_P25 | CAP1_NXDN;
 					m_capabilities2 = CAP2_POCSAG;
+					}
 					break;
 
-				case 2U:
+				case 2U: {
 					LogInfo("MMDVM protocol version: 2, description: %.*s", m_length - 23U, m_buffer + 23U);
+					m_description = std::string((char*)(m_buffer + 23U), m_length - 23U);
+					m_cpu.clear();
+					m_udid.clear();
+					unsigned int udidLen = 0U;
 					switch (m_buffer[6U]) {
 					case 0U:
 						LogInfo("CPU: Atmel ARM, UDID: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", m_buffer[7U], m_buffer[8U], m_buffer[9U], m_buffer[10U], m_buffer[11U], m_buffer[12U], m_buffer[13U], m_buffer[14U], m_buffer[15U], m_buffer[16U], m_buffer[17U], m_buffer[18U], m_buffer[19U], m_buffer[20U], m_buffer[21U], m_buffer[22U]);
+						m_cpu = "Atmel ARM";
+						udidLen = 16U;
 						break;
 					case 1U:
 						LogInfo("CPU: NXP ARM, UDID: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", m_buffer[7U], m_buffer[8U], m_buffer[9U], m_buffer[10U], m_buffer[11U], m_buffer[12U], m_buffer[13U], m_buffer[14U], m_buffer[15U], m_buffer[16U], m_buffer[17U], m_buffer[18U], m_buffer[19U], m_buffer[20U], m_buffer[21U], m_buffer[22U]);
+						m_cpu = "NXP ARM";
+						udidLen = 16U;
 						break;
 					case 2U:
 						LogInfo("CPU: ST-Micro ARM, UDID: %02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", m_buffer[7U], m_buffer[8U], m_buffer[9U], m_buffer[10U], m_buffer[11U], m_buffer[12U], m_buffer[13U], m_buffer[14U], m_buffer[15U], m_buffer[16U], m_buffer[17U], m_buffer[18U]);
+						m_cpu = "ST-Micro ARM";
+						udidLen = 12U;
 						break;
 					default:
 						LogInfo("CPU: Unknown type: %u", m_buffer[6U]);
 						break;
 					}
+					for (unsigned int i = 0U; i < udidLen; i++) {
+						char hex[3U];
+						::snprintf(hex, 3U, "%02X", m_buffer[7U + i]);
+						m_udid += hex;
+					}
 					m_capabilities1 = m_buffer[4U];
 					m_capabilities2 = m_buffer[5U];
+					}
 					break;
 
 				default:
@@ -2091,6 +2151,21 @@ bool CModem::readVersion()
 	LogError("Unable to read the firmware version after six attempts");
 
 	return false;
+}
+
+std::string CModem::getDescription() const
+{
+	return m_description;
+}
+
+std::string CModem::getCPU() const
+{
+	return m_cpu;
+}
+
+std::string CModem::getUDID() const
+{
+	return m_udid;
 }
 
 bool CModem::readStatus()

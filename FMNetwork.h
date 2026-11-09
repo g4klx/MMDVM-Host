@@ -45,6 +45,8 @@ public:
 
 	unsigned int readData(float* out, unsigned int nOut);
 
+	bool readEnd();
+
 	void reset();
 
 	void close();
@@ -61,6 +63,7 @@ private:
 	CRingBuffer<unsigned char> m_buffer;
 	unsigned int        m_seqNo;
 	CTimer              m_timer;
+	bool                m_endOfTransmission;
 
 	bool writeStart();
 	bool writePing();

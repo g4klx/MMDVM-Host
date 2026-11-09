@@ -198,6 +198,16 @@ REMOTE_COMMAND CRemoteControl::getCommand(const std::string& command)
 		}
 
 		m_command = REMOTE_COMMAND::CONFIG_HOSTS;
+	} else if (m_args.at(0U) == "modem") {
+		// The modem's details as JSON, the same as the "Modem" message
+		// sent when it was opened.
+		if (m_host != nullptr) {
+			m_host->buildModemInfoString(reply);
+		} else {
+			reply = "KO";
+		}
+
+		m_command = REMOTE_COMMAND::MODEM_INFO;
 	} else {
 		reply = "KO";
 	}
