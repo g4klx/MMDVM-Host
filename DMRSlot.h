@@ -66,7 +66,7 @@ public:
 
 	void enable(bool enabled);
 
-	static void init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect);
+	static void init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, bool talkerAlias, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect);
 
 	void setRCCommand(unsigned int command);
 
@@ -87,6 +87,11 @@ private:
 	unsigned int               m_netEmbeddedWriteN;
 	unsigned char              m_netTalkerId;
 	CDMRTA                     m_netTalkerAlias;
+	CDMREmbeddedData           m_netAlias[4U];
+	unsigned int               m_netAliasCount;
+	unsigned int               m_netAliasNext;
+	bool                       m_netAliasTurn;
+	const CDMREmbeddedData*    m_netAliasNow;
 	CDMRLC*                    m_rfLC;
 	CDMRLC*                    m_netLC;
 	unsigned char              m_rfSeqNo;
@@ -126,6 +131,7 @@ private:
 
 	static bool                m_embeddedLCOnly;
 	static bool                m_dumpTAData;
+	static bool                m_talkerAlias;
 
 	static CModem*             m_modem;
 	static CDMRNetwork*        m_network;
@@ -151,6 +157,9 @@ private:
 	unsigned int               m_rcCommand;
 
 	void logGPSPosition(const unsigned char* data);
+
+	void setNetTalkerAlias(unsigned int srcId, const class CUserDBentry& entry);
+	void nextNetTalkerAlias();
 
 	void writeQueueRF(const unsigned char* data);
 	void writeQueueNet(const unsigned char* data);
