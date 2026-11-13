@@ -108,7 +108,13 @@ bool CFMNetwork::writeData(const float* data, unsigned int nSamples)
 	buffer[length++] = 'D';
 
 	for (unsigned int i = 0U; i < nSamples; i++) {
-		short val = short(data[i] * 32767.0F + 0.5F);			// Changing audio format from float to S16LE
+		float sample = data[i] * 32767.0F + 0.5F;
+		if (sample > 32767.0F)
+			sample = 32767.0F;
+		else if (sample < -32768.0F)
+			sample = -32768.0F;
+
+		short val = short(sample);			// Changing audio format from float to S16LE
 
 		buffer[length++] = (val >> 0) & 0xFFU;
 		buffer[length++] = (val >> 8) & 0xFFU;
