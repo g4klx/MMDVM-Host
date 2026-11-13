@@ -136,5 +136,65 @@ bool CDMRTA::decodeTA()
 	return taLen >= taSize;
 }
 
+// Writes the lowest count bits of value, most significant first.
+static void putBits(unsigned char* data, unsigned int& pos, unsigned int value, unsigned int count)
+{
+	while (count > 0U) {
+		count--;
+		if ((value >> count) & 1U)
+			data[pos / 8U] |= 0x80U >> (pos % 8U);
+		pos++;
+	}
+}
+
+unsigned int CDMRTA::encode(const std::string& text, unsigned char* blocks)
+{
+	assert(blocks != nullptr);
+
+	::memset(blocks, 0x00U, 4U * 7U);
+
+	// The text in ISO 8859-1, from ASCII or UTF-8. Anything else, and
+	// control characters, can't be sent.
+	std::string chars;
+	bool sevenBit = true;
+	for (std::string::size_type i = 0U; i < text.size(); i++) {
+		unsigned char c = text[i];
+		if (c >= 0x20U && c < 0x7FU) {
+			chars += char(c);
+		} else if ((c == 0xC2U || c == 0xC3U) && (i + 1U) < text.size()) {
+			unsigned char c2 = text[++i];
+			if ((c2 & 0xC0U) != 0x80U)
+				return 0U;
+
+			c = ((c & 0x03U) << 6) | (c2 & 0x3FU);
+			if (c < 0xA0U)
+				return 0U;
+
+			chars += char(c);
+			sevenBit = false;
+		} else {
+			return 0U;
+		}
+	}
+
+	// 31 characters fit in 7 bits, 27 in 8 bits.
+	unsigned int length = chars.size();
+	if (length == 0U || length > (sevenBit ? 31U : 27U))
+		return 0U;
+
+	// The 7 bit format packs the characters right after the format and the
+	// length; the 8 bit format starts them at the second byte.
+	unsigned int pos = 0U;
+	putBits(blocks, pos, sevenBit ? 0U : 1U, 2U);
+	putBits(blocks, pos, length, 5U);
+	if (!sevenBit)
+		pos = 8U;
+
+	for (unsigned int i = 0U; i < length; i++)
+		putBits(blocks, pos, (unsigned char)chars[i], sevenBit ? 7U : 8U);
+
+	return (pos + 55U) / 56U;
+}
+
 #endif
 

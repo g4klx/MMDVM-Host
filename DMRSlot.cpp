@@ -38,6 +38,7 @@ unsigned int   CDMRSlot::m_colorCode = 0U;
 
 bool           CDMRSlot::m_embeddedLCOnly = false;
 bool           CDMRSlot::m_dumpTAData = true;
+bool           CDMRSlot::m_talkerAlias = false;
 
 CModem*        CDMRSlot::m_modem = nullptr;
 CDMRNetwork*   CDMRSlot::m_network = nullptr;
@@ -99,6 +100,11 @@ m_netEmbeddedReadN(0U),
 m_netEmbeddedWriteN(1U),
 m_netTalkerId(TALKER_ID_NONE),
 m_netTalkerAlias(slotNo),
+m_netAlias(),
+m_netAliasCount(0U),
+m_netAliasNext(0U),
+m_netAliasTurn(false),
+m_netAliasNow(nullptr),
 m_rfLC(nullptr),
 m_netLC(nullptr),
 m_rfSeqNo(0U),
@@ -1235,6 +1241,7 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 		std::string dst = m_lookup->find(dstId);
 		class CUserDBentry cn;
 		m_lookup->findWithName(srcId, &cn);
+		setNetTalkerAlias(srcId, cn);
 
 		LogMessage("DMR Slot %u, received network voice header from %s to %s%s", m_slotNo, src.c_str(), flco == FLCO::GROUP ? "TG " : "", dst.c_str());
 		writeJSONNet("start", srcId, src, flco == FLCO::GROUP, dstId);
@@ -1301,6 +1308,7 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 			std::string dst = m_lookup->find(dstId);
 			class CUserDBentry cn;
 			m_lookup->findWithName(srcId, &cn);
+			setNetTalkerAlias(srcId, cn);
 
 			LogMessage("DMR Slot %u, received network late entry from %s to %s%s", m_slotNo, src.c_str(), m_netLC->getFLCO() == FLCO::GROUP ? "TG " : "", dst.c_str());
 			writeJSONNet("late_entry", srcId, src, m_netLC->getFLCO() == FLCO::GROUP, dstId);
@@ -1492,6 +1500,7 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 			std::string dst = m_lookup->find(dstId);
 			class CUserDBentry cn;
 			m_lookup->findWithName(srcId, &cn);
+			setNetTalkerAlias(srcId, cn);
 
 			LogMessage("DMR Slot %u, received network late entry from %s to %s%s", m_slotNo, src.c_str(), m_netLC->getFLCO() == FLCO::GROUP ? "TG " : "", dst.c_str());
 			writeJSONNet("late_entry", srcId, src, m_netLC->getFLCO() == FLCO::GROUP, dstId);
@@ -1526,6 +1535,8 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 			m_netEmbeddedWriteN = (m_netEmbeddedWriteN + 1U) % 2U;
 
 			m_netEmbeddedData[m_netEmbeddedWriteN].reset();
+
+			nextNetTalkerAlias();
 
 			m_packetTimer.start();
 			m_elapsed.start();
@@ -1646,7 +1657,10 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 			}
 		}
 
-		if (m_embeddedLCOnly) {
+		if (m_netAliasNow != nullptr) {
+			// Our Talker Alias
+			lcss = m_netAliasNow->getData(data + 2U, dmrData.getN());
+		} else if (m_embeddedLCOnly) {
 			// Only send the previously received LC
 			lcss = m_netEmbeddedLC.getData(data + 2U, dmrData.getN());
 		} else {
@@ -2056,6 +2070,82 @@ void CDMRSlot::writeNetwork(const CDMRData& dmrData)
 	}
 }
 
+void CDMRSlot::setNetTalkerAlias(unsigned int srcId, const class CUserDBentry& entry)
+{
+	m_netAliasCount = 0U;
+	m_netAliasNext  = 0U;
+	m_netAliasTurn  = true;
+	m_netAliasNow   = nullptr;
+
+	if (!m_talkerAlias)
+		return;
+
+	// Only a caller the ID lookup knows: an unknown one comes back as their number
+	std::string callsign = entry.get(keyCALLSIGN);
+	if (callsign.empty() || callsign == std::to_string(srcId))
+		return;
+
+	std::string alias = callsign;
+	std::string name  = entry.get(keyFIRST_NAME);
+	if (!name.empty())
+		alias += " " + name;
+
+	unsigned char blocks[4U * 7U];
+	unsigned int count = CDMRTA::encode(alias, blocks);
+	if (count == 0U) {
+		alias = callsign;
+		count = CDMRTA::encode(alias, blocks);
+		if (count == 0U)
+			return;
+	}
+
+	for (unsigned int i = 0U; i < count; i++) {
+		unsigned char lc[9U];
+		lc[0U] = (unsigned char)FLCO::TALKER_ALIAS_HEADER + i;
+		lc[1U] = FID_ETSI;
+		::memcpy(lc + 2U, blocks + i * 7U, 7U);
+
+		m_netAlias[i].setLC(CDMRLC(lc));
+	}
+
+	m_netAliasCount = count;
+
+	LogDebug("DMR Slot %u, Talker Alias \"%s\" for network calls that carry none", m_slotNo, alias.c_str());
+}
+
+// Picks what the next superframe's embedded data carries: one block of our
+// Talker Alias, every other superframe, so the voice LC still goes out for
+// late entry.
+//
+// With EmbeddedLCOnly nothing but the LC comes from the network, so ours is
+// the only Talker Alias the radio sees. Otherwise anything the network sent
+// other than its LC goes out as it came, and once the network's own Talker
+// Alias is seen ours stops for the rest of the call, so a radio never puts
+// together a mix of the two.
+void CDMRSlot::nextNetTalkerAlias()
+{
+	m_netAliasNow = nullptr;
+
+	if (m_netAliasCount == 0U)
+		return;
+
+	if (!m_embeddedLCOnly) {
+		if (m_netTalkerId != TALKER_ID_NONE)
+			return;
+
+		const CDMREmbeddedData& net = m_netEmbeddedData[m_netEmbeddedReadN];
+		if (net.isValid() && net.getFLCO() != FLCO::GROUP && net.getFLCO() != FLCO::USER_USER)
+			return;
+	}
+
+	m_netAliasTurn = !m_netAliasTurn;
+	if (!m_netAliasTurn)
+		return;
+
+	m_netAliasNow  = &m_netAlias[m_netAliasNext];
+	m_netAliasNext = (m_netAliasNext + 1U) % m_netAliasCount;
+}
+
 void CDMRSlot::logGPSPosition(const unsigned char* data)
 {
 	unsigned int errorI = (data[2U] & 0x0E) >> 1U;
@@ -2234,7 +2324,7 @@ void CDMRSlot::writeQueueNet(const unsigned char *data)
 	m_queue.addData(data, len);
 }
 
-void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect)
+void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, bool talkerAlias, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect)
 {
 	assert(modem != nullptr);
 	assert(lookup != nullptr);
@@ -2243,6 +2333,7 @@ void CDMRSlot::init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData
 	m_colorCode      = colorCode;
 	m_embeddedLCOnly = embeddedLCOnly;
 	m_dumpTAData     = dumpTAData;
+	m_talkerAlias    = talkerAlias;
 	m_modem          = modem;
 	m_network        = network;
 	m_duplex         = duplex;

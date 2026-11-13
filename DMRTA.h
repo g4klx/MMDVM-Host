@@ -17,6 +17,8 @@
 
 #include "Defines.h"
 
+#include <string>
+
 #if defined(USE_DMR)
 
 class CDMRTA {
@@ -29,6 +31,11 @@ public:
 	const unsigned char* get();
 
 	void reset();
+
+	// Encodes text as a Talker Alias: the header and up to three blocks, seven
+	// bytes each, into blocks (28 bytes). Returns how many of them the text
+	// needs, or zero when it can't be sent.
+	static unsigned int encode(const std::string& text, unsigned char* blocks);
 
 protected:
 	bool decodeTA();
