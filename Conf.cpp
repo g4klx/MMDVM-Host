@@ -187,6 +187,7 @@ m_dmrWhiteList(),
 m_dmrSlot1TGWhiteList(),
 m_dmrSlot2TGWhiteList(),
 m_dmrCallHang(10U),
+m_dmrDuplexControlTG(0U),
 m_dmrTXHang(4U),
 #endif
 m_dmrModeHang(10U),
@@ -772,7 +773,11 @@ bool CConf::read()
 				}
 			} else if (::strcmp(key, "TXHang") == 0)
 				m_dmrTXHang = (unsigned int)::atoi(value);
-			else if (::strcmp(key, "CallHang") == 0)
+			else if (::strcmp(key, "DuplexControlTG") == 0) {
+				char* end = nullptr;
+				unsigned long tg = ::strtoul(value, &end, 10);
+				m_dmrDuplexControlTG = (*end == '\0' && tg <= 0xFFFFFFUL) ? (unsigned int)tg : 0U;
+			} else if (::strcmp(key, "CallHang") == 0)
 				m_dmrCallHang = (unsigned int)::atoi(value);
 			else if (::strcmp(key, "ModeHang") == 0)
 				m_dmrModeHang = (unsigned int)::atoi(value);
@@ -1578,6 +1583,11 @@ std::vector<unsigned int> CConf::getDMRSlot1TGWhiteList() const
 std::vector<unsigned int> CConf::getDMRSlot2TGWhiteList() const
 {
 	return m_dmrSlot2TGWhiteList;
+}
+
+unsigned int CConf::getDMRDuplexControlTG() const
+{
+	return m_dmrDuplexControlTG;
 }
 
 unsigned int CConf::getDMRCallHang() const

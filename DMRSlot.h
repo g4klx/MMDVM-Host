@@ -66,7 +66,7 @@ public:
 
 	void enable(bool enabled);
 
-	static void init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect);
+	static void init(unsigned int colorCode, bool embeddedLCOnly, bool dumpTAData, unsigned int callHang, CModem* modem, CDMRNetwork* network, bool duplex, CDMRLookup* lookup, CRSSIInterpolator* rssiMapper, unsigned int jitter, DMR_OVCM ovcm, bool protect, unsigned int duplexControlTG);
 
 	void setRCCommand(unsigned int command);
 
@@ -121,6 +121,7 @@ private:
 	unsigned int               m_bitErrsAccum;
 	unsigned int               m_bitsCount;
 	bool                       m_enabled;
+	bool                       m_rfControlCall;
 
 	static unsigned int        m_colorCode;
 
@@ -134,6 +135,7 @@ private:
 	static unsigned int        m_hangCount;
 	static DMR_OVCM            m_ovcm;
 	static bool                m_protect;
+	static unsigned int        m_duplexControlTG;
 
 	static CRSSIInterpolator*  m_rssiMapper;
 
