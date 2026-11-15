@@ -171,7 +171,7 @@ bool CDMRSlot::writeModem(unsigned char *data, unsigned int len)
 		FLCO flco       = m_rfLC->getFLCO();
 
 		if (m_rssi != 0) {
-			LogMessage("DMR Slot %u, RF voice transmission lost from %s to %s%s, %.1f seconds, BER: %.1f%%, RSSI: %d/%d/%d dBm", m_slotNo, src.c_str(), flco == FLCO::GROUP ? "TG " : "", dst.c_str(), float(m_rfFrames) / 16.667F, float(m_rfErrs * 100U) / float(m_rfBits), m_minRSSI, m_maxRSSI, m_aveRSSI / m_rssiCountTotal);
+			LogMessage("DMR Slot %u, RF voice transmission lost from %s to %s%s, %.1f seconds, BER: %.1f%%, RSSI: %d/%d/%d dBm", m_slotNo, src.c_str(), flco == FLCO::GROUP ? "TG " : "", dst.c_str(), float(m_rfFrames) / 16.667F, float(m_rfErrs * 100U) / float(m_rfBits), m_minRSSI, m_maxRSSI, m_aveRSSI / int(m_rssiCountTotal));
 			writeJSONRF("lost", float(m_rfFrames) / 16.667F, float(m_rfErrs * 100U) / float(m_rfBits), m_minRSSI, m_maxRSSI, m_aveRSSI / int(m_rssiCountTotal));
 		} else {
 			LogMessage("DMR Slot %u, RF voice transmission lost from %s to %s%s, %.1f seconds, BER: %.1f%%", m_slotNo, src.c_str(), flco == FLCO::GROUP ? "TG " : "", dst.c_str(), float(m_rfFrames) / 16.667F, float(m_rfErrs * 100U) / float(m_rfBits));
