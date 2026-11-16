@@ -1588,11 +1588,14 @@ std::string CDStarControl::convertBuffer(const unsigned char* buffer, unsigned i
 
 	std::string callsign((char*)buffer, length);
 
-	size_t pos = callsign.find_first_of(' ');
-	if (pos != std::string::npos)
-		callsign = callsign.substr(0U, pos);
+	// Remove only the trailing padding: a field can start with spaces
+	// ("       E" for echo, "       U" for unlink) or have a space
+	// inside ("XLX672 E" for a reflector and module).
+	size_t pos = callsign.find_last_not_of(' ');
+	if (pos == std::string::npos)
+		return "";
 
-	return callsign;
+	return callsign.substr(0U, pos + 1U);
 }
 
 #endif
