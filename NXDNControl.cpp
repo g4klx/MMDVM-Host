@@ -37,12 +37,14 @@ const unsigned char SCRAMBLER[] = {
 const unsigned int RSSI_COUNT  = 25U;		// 25 * 40ms = 1000ms
 const unsigned int BER_COUNT   = 25U;		// 25 * 40ms = 1000ms
 
+const unsigned int NXDN_FRAME_TIME = 80U;	// a network voice frame is 80ms (12.5 fps)
+
 const unsigned char BIT_MASK_TABLE[] = { 0x80U, 0x40U, 0x20U, 0x10U, 0x08U, 0x04U, 0x02U, 0x01U };
 
 #define WRITE_BIT1(p,i,b) p[(i)>>3] = (b) ? (p[(i)>>3] | BIT_MASK_TABLE[(i)&7]) : (p[(i)>>3] & ~BIT_MASK_TABLE[(i)&7])
 #define READ_BIT1(p,i)    (p[(i)>>3] & BIT_MASK_TABLE[(i)&7])
 
-CNXDNControl::CNXDNControl(unsigned int ran, unsigned int id, bool selfOnly, INXDNNetwork* network, unsigned int timeout, bool duplex, bool remoteGateway, CNXDNLookup* lookup, CRSSIInterpolator* rssiMapper) :
+CNXDNControl::CNXDNControl(unsigned int ran, unsigned int id, bool selfOnly, INXDNNetwork* network, unsigned int timeout, bool duplex, bool remoteGateway, unsigned int jitter, CNXDNLookup* lookup, CRSSIInterpolator* rssiMapper) :
 m_ran(ran),
 m_id(id),
 m_selfOnly(selfOnly),
@@ -77,10 +79,23 @@ m_rssiAccum(0),
 m_rssiCount(0U),
 m_bitsCount(0U),
 m_bitErrsAccum(0U),
-m_enabled(true)
+m_enabled(true),
+m_netJitter(5000U, "NXDN Jitter"),
+m_playoutAccum(0U),
+m_jitterSlots(jitter / NXDN_FRAME_TIME),
+m_netJitterCount(0U),
+m_netBuffering(false),
+m_netEndPending(false),
+m_lastFrameValid(false)
 {
 	assert(lookup != nullptr);
 	assert(rssiMapper != nullptr);
+
+	// A jitter buffer of at least one frame, else gap concealment is disabled
+	if (m_jitterSlots < 1U)
+		m_jitterSlots = 1U;
+
+	::memset(m_lastFrame, 0x00U, NXDN_FRAME_LENGTH_BYTES + 2U);
 }
 
 CNXDNControl::~CNXDNControl()
@@ -109,7 +124,7 @@ bool CNXDNControl::writeModem(unsigned char *data, unsigned int len)
 			LogMessage("NXDN, transmission lost from %s to %s%u, %.1f seconds, BER: %.1f%%", source.c_str(), grp ? "TG " : "", dstId, float(m_rfFrames) / 12.5F, float(m_rfErrs * 100U) / float(m_rfBits));
 			writeJSONRF("lost", float(m_rfFrames) / 12.5F, float(m_rfErrs * 100U) / float(m_rfBits));
 		}
-		writeEndRF();
+		writeEndRF(true);
 		return false;
 	}
 
@@ -706,8 +721,45 @@ unsigned int CNXDNControl::readModem(unsigned char* data)
 	return len;
 }
 
-void CNXDNControl::writeEndRF()
+void CNXDNControl::writeEndRF(bool writeEnd)
 {
+	// Signal lost before the SU's final frame: its TX_REL never reached us, so
+	// synthesise one from the cached call and send it on. The CAI has the
+	// repeater originate TX_REL to terminate (NXDN TS 1, 8.3.2); without it the
+	// gateway and reflector only fall back to their 1.5s watchdogs.
+	if (writeEnd && m_netState == RPT_NET_STATE::IDLE) {
+		unsigned char message[22U];
+		m_rfLayer3.getData(message);
+		message[0U] = NXDN_MESSAGE_TYPE_TX_REL;   // same call, VCALL -> TX_REL
+
+		CNXDNFACCH1 facch;
+		facch.setData(message);
+
+		// Identical structure to the real TX_REL trailer in processVoice():
+		// LICH + idle SACCH + FACCH1 (x2). netData[0] (LICH) and netData[5]
+		// (msg type) are exactly what the gateway/reflector match on.
+		unsigned char netData[40U];
+		::memset(netData, 0x00U, 40U);
+
+		CNXDNLICH lich;
+		lich.setRFCT(NXDN_LICH_RFCT_RDCH);
+		lich.setFCT(NXDN_LICH_USC_SACCH_NS);
+		lich.setOption(NXDN_LICH_STEAL_FACCH);
+		lich.setDirection(NXDN_LICH_DIRECTION_INBOUND);
+		netData[0U] = lich.getRaw();
+
+		CNXDNSACCH sacch;
+		sacch.setRAN(m_ran);
+		sacch.setStructure(NXDN_SR_SINGLE);
+		sacch.setData(SACCH_IDLE);
+		sacch.getRaw(netData + 1U);
+
+		facch.getRaw(netData + 5U + 0U);
+		facch.getRaw(netData + 5U + 14U);
+
+		writeNetwork(netData, NXDN_NETWORK_MESSAGE_TYPE::VOICE_TRAILER);
+	}
+
 	m_rfState = RPT_RF_STATE::LISTENING;
 
 	m_rfMask = 0x00U;
@@ -732,6 +784,14 @@ void CNXDNControl::writeEndNet()
 	m_netTimeoutTimer.stop();
 	m_networkWatchdog.stop();
 	m_packetTimer.stop();
+
+	// Reset the jitter buffer
+	m_playoutAccum = 0U;
+	m_netJitter.clear();
+	m_netJitterCount = 0U;
+	m_netBuffering   = false;
+	m_netEndPending  = false;
+	m_lastFrameValid = false;
 
 	if (m_network != nullptr)
 		m_network->reset();
@@ -835,7 +895,7 @@ void CNXDNControl::writeNetwork()
 
 		scrambler(data + 2U);
 
-		writeQueueNet(data);
+		jitterEnqueue(data);
 
 		unsigned short dstId = m_netLayer3.getDestinationGroupId();
 		bool grp             = m_netLayer3.getIsGroup();
@@ -847,7 +907,8 @@ void CNXDNControl::writeNetwork()
 			m_netFrames++;
 			LogMessage("NXDN, received network end of transmission from %s to %s%u, %.1f seconds", source.get(keyCALLSIGN).c_str(), grp ? "TG " : "", dstId, float(m_netFrames) / 12.5F);
 			writeJSONNet("end", float(m_netFrames) / 12.5F);
-			writeEndNet();
+			// Drain the jitter buffer before ending so no audio is dropped
+			m_netEndPending = true;
 		} else if (type == NXDN_MESSAGE_TYPE_VCALL) {
 			LogMessage("NXDN, received network transmission from %s to %s%u", source.get(keyCALLSIGN).c_str(), grp ? "TG " : "", dstId);
 			writeJSONNet("start", srcId, source.get(keyCALLSIGN), grp, dstId);
@@ -857,6 +918,9 @@ void CNXDNControl::writeNetwork()
 			m_elapsed.start();
 			m_netState  = RPT_NET_STATE::AUDIO;
 			m_netFrames = 1U;
+			m_netBuffering   = true;
+			m_netEndPending  = false;
+			m_lastFrameValid = false;
 		} else {
 			CUtils::dump(2U, "NXDN, interesting non superblock network frame", netData, 33U);
 			return;
@@ -909,6 +973,9 @@ void CNXDNControl::writeNetwork()
 			m_elapsed.start();
 			m_netState  = RPT_NET_STATE::AUDIO;
 			m_netFrames = 1U;
+			m_netBuffering   = true;
+			m_netEndPending  = false;
+			m_lastFrameValid = false;
 
 			// Create a dummy start message
 			unsigned char start[NXDN_FRAME_LENGTH_BYTES + 2U];
@@ -943,7 +1010,7 @@ void CNXDNControl::writeNetwork()
 
 			scrambler(start + 2U);
 
-			writeQueueNet(start);
+			jitterEnqueue(start);
 		}
 
 		m_netFrames++;
@@ -986,7 +1053,7 @@ void CNXDNControl::writeNetwork()
 
 		scrambler(data + 2U);
 
-		writeQueueNet(data);
+		jitterEnqueue(data);
 	}
 }
 
@@ -1000,6 +1067,38 @@ void CNXDNControl::clock(unsigned int ms)
 
 	m_rfTimeoutTimer.clock(ms);
 	m_netTimeoutTimer.clock(ms);
+
+	// Network jitter buffer playout: prime a cushion, then release one frame
+	// per frame time, replaying the last frame on an underrun so the receiver
+	// keeps frame and SACCH lock through lost or late network packets. The
+	// playout clock carries its remainder so the average rate stays exactly
+	// one frame per NXDN_FRAME_TIME - with no drift the buffer cannot ratchet
+	// up over a long transmission and overrun the network watchdog at the end.
+	if (m_netState == RPT_NET_STATE::AUDIO) {
+		if (m_netBuffering) {
+			// Hold until primed, or until the stream ends while still filling
+			if ((m_netJitterCount >= m_jitterSlots) || m_netEndPending) {
+				m_netBuffering = false;
+				m_playoutAccum = 0U;
+
+				// Release one frame now and keep the rest buffered, so a
+				// gap is filled from real queued frames rather than by
+				// replaying the last one.
+				playoutNet();
+			}
+		} else {
+			m_playoutAccum += ms;
+
+			// A long scheduling stall should resync, not dump a burst
+			if (m_playoutAccum > 10U * NXDN_FRAME_TIME)
+				m_playoutAccum = NXDN_FRAME_TIME;
+
+			while (m_playoutAccum >= NXDN_FRAME_TIME) {
+				m_playoutAccum -= NXDN_FRAME_TIME;
+				playoutNet();
+			}
+		}
+	}
 
 	if (m_netState == RPT_NET_STATE::AUDIO) {
 		m_networkWatchdog.clock(ms);
@@ -1053,6 +1152,64 @@ void CNXDNControl::writeQueueNet(const unsigned char *data)
 	m_queue.addData(&len, 1U);
 
 	m_queue.addData(data, len);
+}
+
+void CNXDNControl::jitterEnqueue(const unsigned char* data)
+{
+	assert(data != nullptr);
+
+	if (m_netTimeoutTimer.isRunning() && m_netTimeoutTimer.hasExpired())
+		return;
+
+	unsigned char len = NXDN_FRAME_LENGTH_BYTES + 2U;
+
+	unsigned int space = m_netJitter.freeSpace();
+	if (space < (len + 1U)) {
+		LogError("NXDN, overflow in the NXDN jitter buffer");
+		return;
+	}
+
+	m_netJitter.addData(&len, 1U);
+	m_netJitter.addData(data, len);
+	m_netJitterCount++;
+}
+
+void CNXDNControl::playoutNet()
+{
+	if (m_netJitterCount > 0U) {
+		// Play the next buffered frame and remember it for concealment
+		unsigned char len = 0U;
+		m_netJitter.getData(&len, 1U);
+
+		unsigned char data[NXDN_FRAME_LENGTH_BYTES + 2U];
+		m_netJitter.getData(data, len);
+		m_netJitterCount--;
+
+		::memcpy(m_lastFrame, data, len);
+		m_lastFrameValid = true;
+
+		unsigned int space = m_queue.freeSpace();
+		if (space < (len + 1U)) {
+			LogError("NXDN, overflow in the NXDN RF queue");
+			return;
+		}
+
+		m_queue.addData(&len, 1U);
+		m_queue.addData(data, len);
+	} else if (m_netEndPending) {
+		// Buffer drained after end of transmission, so end for real
+		writeEndNet();
+	} else if (m_lastFrameValid) {
+		// Underrun mid-stream: replay the last frame to hold the receiver's lock
+		unsigned char len = NXDN_FRAME_LENGTH_BYTES + 2U;
+
+		unsigned int space = m_queue.freeSpace();
+		if (space < (len + 1U))
+			return;
+
+		m_queue.addData(&len, 1U);
+		m_queue.addData(m_lastFrame, len);
+	}
 }
 
 void CNXDNControl::writeNetwork(const unsigned char *data, NXDN_NETWORK_MESSAGE_TYPE type)
@@ -1123,6 +1280,14 @@ void CNXDNControl::enable(bool enabled)
 		m_netTimeoutTimer.stop();
 		m_networkWatchdog.stop();
 		m_packetTimer.stop();
+
+		// Reset the jitter buffer
+		m_playoutAccum = 0U;
+		m_netJitter.clear();
+		m_netJitterCount = 0U;
+		m_netBuffering   = false;
+		m_netEndPending  = false;
+		m_lastFrameValid = false;
 	}
 
 	m_enabled = enabled;

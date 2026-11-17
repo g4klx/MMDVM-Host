@@ -809,7 +809,9 @@ int CMMDVMHost::run()
 		LogInfo("    TX Hang: %us", txHang);
 		LogInfo("    Mode Hang: %us", m_nxdnRFModeHang);
 
-		m_nxdn = new CNXDNControl(ran, id, selfOnly, m_nxdnNetwork, m_timeout, m_duplex, remoteGateway, m_nxdnLookup, rssi);
+		unsigned int jitter = m_conf.getNXDNNetworkJitter();
+
+		m_nxdn = new CNXDNControl(ran, id, selfOnly, m_nxdnNetwork, m_timeout, m_duplex, remoteGateway, jitter, m_nxdnLookup, rssi);
 	}
 #endif
 
@@ -1945,6 +1947,7 @@ bool CMMDVMHost::createNXDNNetwork()
 	unsigned short gatewayPort = m_conf.getNXDNGatewayPort();
 	std::string localAddress   = m_conf.getNXDNLocalAddress();
 	unsigned short localPort   = m_conf.getNXDNLocalPort();
+	unsigned int jitter        = m_conf.getNXDNNetworkJitter();
 	m_nxdnNetModeHang          = m_conf.getNXDNNetworkModeHang();
 	bool debug                 = m_conf.getNXDNNetworkDebug();
 
@@ -1954,6 +1957,7 @@ bool CMMDVMHost::createNXDNNetwork()
 	LogInfo("    Gateway Port: %hu", gatewayPort);
 	LogInfo("    Local Address: %s", localAddress.c_str());
 	LogInfo("    Local Port: %hu", localPort);
+	LogInfo("    Jitter: %ums", jitter);
 	LogInfo("    Mode Hang: %us", m_nxdnNetModeHang);
 
 	if (protocol == "Kenwood")

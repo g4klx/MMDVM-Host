@@ -39,7 +39,7 @@
 
 class CNXDNControl {
 public:
-	CNXDNControl(unsigned int ran, unsigned int id, bool selfOnly, INXDNNetwork* network, unsigned int timeout, bool duplex, bool remoteGateway, CNXDNLookup* lookup, CRSSIInterpolator* rssiMapper);
+	CNXDNControl(unsigned int ran, unsigned int id, bool selfOnly, INXDNNetwork* network, unsigned int timeout, bool duplex, bool remoteGateway, unsigned int jitter, CNXDNLookup* lookup, CRSSIInterpolator* rssiMapper);
 	~CNXDNControl();
 
 	bool writeModem(unsigned char* data, unsigned int len);
@@ -88,18 +88,29 @@ private:
 	unsigned int               m_bitsCount;
 	unsigned int               m_bitErrsAccum;
 	bool                       m_enabled;
+	// Network jitter buffer (gap concealment for the net->modem voice path)
+	CRingBuffer<unsigned char> m_netJitter;
+	unsigned int               m_playoutAccum;
+	unsigned int               m_jitterSlots;
+	unsigned int               m_netJitterCount;
+	bool                       m_netBuffering;
+	bool                       m_netEndPending;
+	bool                       m_lastFrameValid;
+	unsigned char              m_lastFrame[NXDN_FRAME_LENGTH_BYTES + 2U];
 
 	bool processVoice(unsigned char usc, unsigned char option, unsigned char *data);
 	bool processData(unsigned char option, unsigned char *data);
 
 	void writeQueueRF(const unsigned char* data);
 	void writeQueueNet(const unsigned char* data);
+	void jitterEnqueue(const unsigned char* data);
+	void playoutNet();
 	void writeNetwork(const unsigned char* data, NXDN_NETWORK_MESSAGE_TYPE type);
 	void writeNetwork();
 
 	void scrambler(unsigned char* data) const;
 
-	void writeEndRF();
+	void writeEndRF(bool writeEnd = false);
 	void writeEndNet();
 
 	void writeJSONRSSI();

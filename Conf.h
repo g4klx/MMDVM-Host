@@ -308,6 +308,7 @@ public:
 	std::string  getNXDNLocalAddress() const;
 	unsigned short getNXDNLocalPort() const;
 	unsigned int getNXDNNetworkModeHang() const;
+	unsigned int getNXDNNetworkJitter() const;
 	bool         getNXDNNetworkDebug() const;
 #endif
 
@@ -606,6 +607,7 @@ private:
 #endif
 	unsigned int m_nxdnNetworkModeHang;
 #if defined(USE_NXDN)
+	unsigned int m_nxdnNetworkJitter;
 	bool         m_nxdnNetworkDebug;
 #endif
 
