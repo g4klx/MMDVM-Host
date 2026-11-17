@@ -528,6 +528,19 @@ bool CModem::open()
 	return true;
 }
 
+// A modem that stops answering is reported as a "Modem" message with
+// "open" false, and again with "open" true once it answers. The reopen
+// loop in clock() holds MMDVM-Host until then, so nothing else is
+// published meanwhile, and the process is still running.
+static void writeJSONOpen(bool open)
+{
+	nlohmann::json json;
+	json["timestamp"] = CUtils::createTimestamp();
+	json["open"]      = open;
+
+	WriteJSON("Modem", json);
+}
+
 void CModem::clock(unsigned int ms)
 {
 	assert(m_port != nullptr);
@@ -542,12 +555,16 @@ void CModem::clock(unsigned int ms)
 	m_inactivityTimer.clock(ms);
 	if (m_inactivityTimer.hasExpired()) {
 		LogError("No reply from the modem for some time, resetting it");
+		writeJSONOpen(false);
 		m_error = true;
 		close();
 
 		CThread::sleep(2000U);		// 2s
 		while (!open())
 			CThread::sleep(5000U);	// 5s
+
+		LogMessage("The modem is answering again");
+		writeJSONOpen(true);
 	}
 
 	RESP_TYPE_MMDVM type = getResponse();
