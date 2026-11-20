@@ -195,6 +195,17 @@
 		"port": {"type": ["string", "integer"]},
 		"speed": {"type": "integer"},
 		"address": {"type": "string"},
+		"problem": {"type": "string", "enum": ["no_version", "protocol", "config", "freq"]},
+		"unknown_protocol": {"type": "integer"},
+		"overflows": {
+			"type": "object",
+			"adc": {"type": "integer"},
+			"dac": {"type": "integer"},
+			"rx": {"type": "integer"},
+			"tx": {"type": "integer"},
+			"required": ["adc", "dac", "rx", "tx"]
+		},
+		"polls": {"type": "integer"},
 		"required": ["timestamp", "open"]
 	}
 }
