@@ -278,6 +278,11 @@ m_tx(false),
 m_txInhibit(false),
 m_cd(false),
 m_lockout(false),
+m_adcOverflows(0U),
+m_dacOverflows(0U),
+m_rxOverflows(0U),
+m_txOverflows(0U),
+m_faultPolls(0U),
 m_error(false),
 m_mode(MODE_IDLE),
 #if defined(USE_FM)
@@ -539,6 +544,60 @@ static void writeJSONOpen(bool open)
 	json["open"]      = open;
 
 	WriteJSON("Modem", json);
+}
+
+// A modem that can't be set up is reported as a "Modem" message with a
+// "problem": "no_version" (no answer to GET_VERSION), "protocol" (a
+// protocol version this MMDVM-Host doesn't know), "config" or "freq"
+// (SET_CONFIG or SET_FREQ not answered, or refused). "open" is false: the
+// modem isn't working.
+static void writeJSONProblem(const char* problem, unsigned int protocol = 0U)
+{
+	nlohmann::json json;
+	json["timestamp"] = CUtils::createTimestamp();
+	json["open"]      = false;
+	json["problem"]   = problem;
+	if (protocol != 0U)
+		json["unknown_protocol"] = int(protocol);
+
+	WriteJSON("Modem", json);
+}
+
+// Overflows the modem's status flags report are counted, and sent as a
+// "Modem" message with "overflows" at most every 10s (40 status polls),
+// only when there were some: how many status replies carried each flag.
+void CModem::noteFaults(bool adc, bool dac, bool rx, bool tx)
+{
+	if (adc)
+		m_adcOverflows++;
+	if (dac)
+		m_dacOverflows++;
+	if (rx)
+		m_rxOverflows++;
+	if (tx)
+		m_txOverflows++;
+
+	m_faultPolls++;
+	if (m_faultPolls < 40U)
+		return;
+
+	if ((m_adcOverflows + m_dacOverflows + m_rxOverflows + m_txOverflows) > 0U) {
+		nlohmann::json json;
+		json["timestamp"] = CUtils::createTimestamp();
+		json["open"]      = true;
+		nlohmann::json overflows;
+		overflows["adc"] = int(m_adcOverflows);
+		overflows["dac"] = int(m_dacOverflows);
+		overflows["rx"]  = int(m_rxOverflows);
+		overflows["tx"]  = int(m_txOverflows);
+		json["overflows"] = overflows;
+		json["polls"]     = int(m_faultPolls);
+
+		WriteJSON("Modem", json);
+	}
+
+	m_adcOverflows = m_dacOverflows = m_rxOverflows = m_txOverflows = 0U;
+	m_faultPolls = 0U;
 }
 
 void CModem::clock(unsigned int ms)
@@ -868,6 +927,7 @@ void CModem::clock(unsigned int ms)
 						bool dacOverflow = (m_buffer[m_offset + 2U] & 0x20U) == 0x20U;
 						if (dacOverflow)
 							LogError("MMDVM DAC levels have overflowed");
+						noteFaults(adcOverflow, dacOverflow, rxOverflow, txOverflow);
 						m_cd = (m_buffer[m_offset + 2U] & 0x40U) == 0x40U;
 
 #if defined(USE_P25)
@@ -925,6 +985,7 @@ void CModem::clock(unsigned int ms)
 						bool dacOverflow = (m_buffer[m_offset + 1U] & 0x20U) == 0x20U;
 						if (dacOverflow)
 							LogError("MMDVM DAC levels have overflowed");
+						noteFaults(adcOverflow, dacOverflow, rxOverflow, txOverflow);
 						m_cd = (m_buffer[m_offset + 1U] & 0x40U) == 0x40U;
 
 #if defined(USE_DSTAR)
@@ -2137,6 +2198,7 @@ bool CModem::readVersion()
 
 				default:
 					LogError("MMDVM protocol version: %u, unsupported by this version of the MMDVM Host", m_protocolVersion);
+					writeJSONProblem("protocol", m_protocolVersion);
 					return false;
 				}
 
@@ -2166,6 +2228,7 @@ bool CModem::readVersion()
 	}
 
 	LogError("Unable to read the firmware version after six attempts");
+	writeJSONProblem("no_version");
 
 	return false;
 }
@@ -2360,6 +2423,7 @@ bool CModem::setConfig1()
 			count++;
 			if (count >= MAX_RESPONSES) {
 				LogError("The MMDVM is not responding to the SET_CONFIG command");
+				writeJSONProblem("config");
 				return false;
 			}
 		}
@@ -2369,6 +2433,7 @@ bool CModem::setConfig1()
 
 	if ((resp == RESP_TYPE_MMDVM::OK) && (m_buffer[2U] == MMDVM_NAK)) {
 		LogError("Received a NAK to the SET_CONFIG command from the modem");
+		writeJSONProblem("config");
 		return false;
 	}
 
@@ -2548,6 +2613,7 @@ bool CModem::setConfig2()
 			count++;
 			if (count >= MAX_RESPONSES) {
 				LogError("The MMDVM is not responding to the SET_CONFIG command");
+				writeJSONProblem("config");
 				return false;
 			}
 		}
@@ -2557,6 +2623,7 @@ bool CModem::setConfig2()
 
 	if ((resp == RESP_TYPE_MMDVM::OK) && (m_buffer[2U] == MMDVM_NAK)) {
 		LogError("Received a NAK to the SET_CONFIG command from the modem");
+		writeJSONProblem("config");
 		return false;
 	}
 
@@ -2625,6 +2692,7 @@ bool CModem::setFrequency()
 			count++;
 			if (count >= MAX_RESPONSES) {
 				LogError("The MMDVM is not responding to the SET_FREQ command");
+				writeJSONProblem("freq");
 				return false;
 			}
 		}
@@ -2634,6 +2702,7 @@ bool CModem::setFrequency()
 
 	if ((resp == RESP_TYPE_MMDVM::OK) && (m_buffer[2U] == MMDVM_NAK)) {
 		LogError("Received a NAK to the SET_FREQ command from the modem");
+		writeJSONProblem("freq");
 		return false;
 	}
 

@@ -369,6 +369,11 @@ private:
 	bool                       m_txInhibit;
 	bool                       m_cd;
 	bool                       m_lockout;
+	unsigned int               m_adcOverflows;
+	unsigned int               m_dacOverflows;
+	unsigned int               m_rxOverflows;
+	unsigned int               m_txOverflows;
+	unsigned int               m_faultPolls;
 	bool                       m_error;
 	unsigned char              m_mode;
 #if defined(USE_FM)
@@ -415,6 +420,7 @@ private:
 	std::string                m_udid;
 
 	bool readVersion();
+	void noteFaults(bool adc, bool dac, bool rx, bool tx);
 	bool readStatus();
 	bool setConfig1();
 	bool setConfig2();
