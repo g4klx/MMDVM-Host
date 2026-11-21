@@ -2660,7 +2660,12 @@ bool CModem::setFrequency()
 
 	buffer[0U]  = MMDVM_FRAME_START;
 
-	buffer[1U]  = 17U;
+	// A DV-Mega takes the frequencies only: SET_FREQ of 12 bytes
+	// (it has no RF level or POCSAG frequency)
+	const bool dvmega = m_description.compare(0U, 6U, "DVMEGA") == 0;
+	const unsigned int len = dvmega ? 12U : 17U;
+
+	buffer[1U]  = len;
 
 	buffer[2U]  = MMDVM_SET_FREQ;
 
@@ -2678,8 +2683,8 @@ bool CModem::setFrequency()
 
 	// CUtils::dump(1U, "Written", buffer, 17U);
 
-	int ret = m_port->write(buffer, 17U);
-	if (ret != 17)
+	int ret = m_port->write(buffer, len);
+	if (ret != int(len))
 		return false;
 
 	unsigned int count = 0U;
