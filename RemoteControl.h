@@ -98,7 +98,8 @@ enum class REMOTE_COMMAND {
 	RELOAD,
 	CONNECTION_STATUS,
 	CONFIG_HOSTS,
-	MODEM_INFO
+	MODEM_INFO,
+	LIGHTS
 };
 
 class CRemoteControl {

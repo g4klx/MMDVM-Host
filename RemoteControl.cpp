@@ -179,6 +179,9 @@ REMOTE_COMMAND CRemoteControl::getCommand(const std::string& command)
 			m_command = REMOTE_COMMAND::LISTEN_OFF;
 		else
 			reply = "KO";
+	} else if (m_args.at(0U) == "lights") {
+		// WPSD: "lights": the lights' settings read again and sent.
+		m_command = REMOTE_COMMAND::LIGHTS;
 	} else if (m_args.at(0U) == "reload") {
 		// Reload command is in the form of "reload"
 		m_command = REMOTE_COMMAND::RELOAD;
