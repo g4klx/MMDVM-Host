@@ -24,6 +24,8 @@
 
 #include <cstdint>
 
+#include "Defines.h"
+
 class CConf
 {
 public:
@@ -205,6 +207,11 @@ public:
 	unsigned int getNXDNTXHang() const;
 	unsigned int getNXDNModeHang() const;
 #endif
+
+	// WPSD: per-mode offsets, by MODE_OFFSETS index (D-Star, DMR, System
+	// Fusion, P25, NXDN).
+	int          getModeRXOffset(unsigned int mode) const;
+	int          getModeTXOffset(unsigned int mode) const;
 
 #if defined(USE_POCSAG)
 	// The POCSAG section
@@ -499,6 +506,9 @@ private:
 	unsigned int m_nxdnTXHang;
 #endif
 	unsigned int m_nxdnModeHang;
+
+	int          m_modeRXOffset[MODE_OFFSETS];
+	int          m_modeTXOffset[MODE_OFFSETS];
 
 #if defined(USE_POCSAG)
 	bool         m_pocsagEnabled;
