@@ -362,6 +362,32 @@ m_lockFileEnabled(false),
 m_lockFileName(),
 m_remoteControlEnabled(false)
 {
+	for (unsigned int i = 0U; i < MODE_OFFSETS; i++)
+		m_modeRXOffset[i] = m_modeTXOffset[i] = 0;
+}
+
+// WPSD: a per-mode offset in [Modem], on top of RXOffset and TXOffset, for
+// a modem whose firmware says ModeOffsets: D-StarRXOffset, D-StarTXOffset,
+// DMR..., YSF..., P25..., NXDN... (named like D-StarTXLevel).
+static bool modeOffsetKey(const char* key, int* rx, int* tx, const char* value)
+{
+	static const char* const names[MODE_OFFSETS] = {"D-Star", "DMR", "YSF", "P25", "NXDN"};
+
+	for (unsigned int i = 0U; i < MODE_OFFSETS; i++) {
+		size_t n = ::strlen(names[i]);
+		if (::strncmp(key, names[i], n) != 0)
+			continue;
+		if (::strcmp(key + n, "RXOffset") == 0) {
+			rx[i] = ::atoi(value);
+			return true;
+		}
+		if (::strcmp(key + n, "TXOffset") == 0) {
+			tx[i] = ::atoi(value);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 CConf::~CConf()
@@ -563,6 +589,8 @@ bool CConf::read()
 			else if (::strcmp(key, "Time") == 0)
 				m_nxdnIdLookupTime = (unsigned int)::atoi(value);
 #endif
+		} else if (section == SECTION::MODEM && modeOffsetKey(key, m_modeRXOffset, m_modeTXOffset, value)) {
+			// WPSD: D-StarRXOffset ... NXDNTXOffset (see modeOffsetKey)
 		} else if (section == SECTION::MODEM) {
 			if (::strcmp(key, "Protocol") == 0)
 				m_modemProtocol = value;
@@ -2246,3 +2274,13 @@ bool CConf::getRemoteControlEnabled() const
 	return m_remoteControlEnabled;
 }
 
+
+int CConf::getModeRXOffset(unsigned int mode) const
+{
+	return mode < MODE_OFFSETS ? m_modeRXOffset[mode] : 0;
+}
+
+int CConf::getModeTXOffset(unsigned int mode) const
+{
+	return mode < MODE_OFFSETS ? m_modeTXOffset[mode] : 0;
+}

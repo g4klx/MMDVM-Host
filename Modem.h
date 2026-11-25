@@ -50,6 +50,7 @@ public:
 
 	void setPort(IModemPort* port);
 	void setRFParams(unsigned int rxFrequency, int rxOffset, unsigned int txFrequency, int txOffset, int txDCOffset, int rxDCOffset, float rfLevel, unsigned int pocsagFrequency);
+	void setModeOffsets(const int* rxOffsets, const int* txOffsets);
 	void setModeParams(bool dstarEnabled, bool dmrEnabled, bool ysfEnabled, bool p25Enabled, bool nxdnEnabled, bool pocsagEnabled, bool fmEnabled);
 	void setLevels(float rxLevel, float cwIdTXLevel, float dstarTXLevel, float dmrTXLevel, float ysfTXLevel, float p25TXLevel, float nxdnTXLevel, float pocsagLevel, float fmTXLevel);
 
@@ -416,6 +417,8 @@ private:
 	unsigned char              m_capabilities1;
 	unsigned char              m_capabilities2;
 	std::string                m_description;
+	int                        m_modeRXOffset[MODE_OFFSETS];
+	int                        m_modeTXOffset[MODE_OFFSETS];
 	std::string                m_cpu;
 	std::string                m_udid;
 
@@ -425,6 +428,7 @@ private:
 	bool setConfig1();
 	bool setConfig2();
 	bool setFrequency();
+	bool setModeOffsets();
 #if defined(USE_FM)
 	bool setFMCallsignParams();
 	bool setFMAckParams();

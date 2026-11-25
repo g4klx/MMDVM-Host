@@ -1687,6 +1687,14 @@ bool CMMDVMHost::createModem()
 	m_modem->setModeParams(m_dstarEnabled, m_dmrEnabled, m_ysfEnabled, m_p25Enabled, m_nxdnEnabled, m_pocsagEnabled, m_fmEnabled);
 	m_modem->setLevels(rxLevel, cwIdTXLevel, dstarTXLevel, dmrTXLevel, ysfTXLevel, p25TXLevel, nxdnTXLevel, pocsagTXLevel, fmTXLevel);
 	m_modem->setRFParams(rxFrequency, rxOffset, txFrequency, txOffset, txDCOffset, rxDCOffset, rfLevel, pocsagFrequency);
+	{
+		int modeRX[MODE_OFFSETS], modeTX[MODE_OFFSETS];
+		for (unsigned int i = 0U; i < MODE_OFFSETS; i++) {
+			modeRX[i] = m_conf.getModeRXOffset(i);
+			modeTX[i] = m_conf.getModeTXOffset(i);
+		}
+		m_modem->setModeOffsets(modeRX, modeTX);
+	}
 #if defined(USE_DMR)
 	m_modem->setDMRParams(colorCode);
 	if (trunking)
