@@ -60,8 +60,12 @@ public:
 
 private:
 	void setListenOnly(bool on);
+	bool lightsDarkNow();
 	CConf           m_conf;
 	CModem*         m_modem;
+	CLights         m_lights;       // WPSD: as last read ([Modem], Lights.h)
+	unsigned int    m_lightsCheck;  // ms since the schedule was looked at
+	std::string     m_lightsZone;   // the TZ set for it
 #if defined(USE_DSTAR)
 	CDStarControl*  m_dstar;
 #endif

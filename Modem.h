@@ -22,6 +22,7 @@
 #include "ModemPort.h"
 #include "RingBuffer.h"
 #include "Defines.h"
+#include "Lights.h"
 #include "Timer.h"
 #include "DMRCSBK.h"
 #include "DMRSlotType.h"
@@ -50,6 +51,11 @@ public:
 
 	void setPort(IModemPort* port);
 	void setRFParams(unsigned int rxFrequency, int rxOffset, unsigned int txFrequency, int txOffset, int txDCOffset, int rxDCOffset, float rfLevel, unsigned int pocsagFrequency);
+	// WPSD: how the lights work (firmware that says Lights): set before
+	// open() to send them as it opens, or later to send them at once.
+	// dark puts every light out (the schedule).
+	void setLights(const CLights& lights);
+	void setLightsDark(bool dark);
 	void setModeOffsets(const int* rxOffsets, const int* txOffsets);
 	void setModeParams(bool dstarEnabled, bool dmrEnabled, bool ysfEnabled, bool p25Enabled, bool nxdnEnabled, bool pocsagEnabled, bool fmEnabled);
 	void setLevels(float rxLevel, float cwIdTXLevel, float dstarTXLevel, float dmrTXLevel, float ysfTXLevel, float p25TXLevel, float nxdnTXLevel, float pocsagLevel, float fmTXLevel);
@@ -416,6 +422,8 @@ private:
 #endif
 	unsigned char              m_capabilities1;
 	unsigned char              m_capabilities2;
+	CLights                    m_lights;
+	bool                       m_lightsDark;
 	std::string                m_description;
 	int                        m_modeRXOffset[MODE_OFFSETS];
 	int                        m_modeTXOffset[MODE_OFFSETS];
@@ -425,6 +433,7 @@ private:
 	bool readVersion();
 	void noteFaults(bool adc, bool dac, bool rx, bool tx);
 	bool readStatus();
+	bool sendLights(bool wait);
 	bool setConfig1();
 	bool setConfig2();
 	bool setFrequency();
